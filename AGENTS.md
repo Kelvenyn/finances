@@ -12,6 +12,7 @@ Aplicativo responsivo para consolidar finanças pessoais e empresariais de Kelve
 - Supabase (PostgreSQL), projeto `xwwgrbtdbklwxcrlesxg`
 - Banco MCP REST API / Open Finance
 - Deploy planejado na Vercel
+- Produção: `https://finances-tau-blond.vercel.app`
 
 As credenciais ficam somente em `.env.local`, que está ignorado pelo Git. Nunca copie seus valores para documentação ou commits.
 
@@ -57,13 +58,12 @@ Concluído:
 - [x] Total consolidado atual: 8.153 transações
 - [x] Dashboard, transações, filtros e fila de revisão respondendo com HTTP 200
 - [x] TypeScript, ESLint e build de produção sem erros
+- [x] Projeto publicado na Vercel com preset Next.js e variáveis configuradas
 
 Pendente:
 
-- [ ] Publicar na Vercel e configurar as variáveis de ambiente
 - [ ] Configurar execução automática do sync
 - [ ] Implementar autenticação antes de tornar a URL pública
 - [ ] Implementar edição de categoria na fila de revisão
 - [ ] Implementar Web Push completo (o service worker básico já existe)
 - [ ] Rotacionar as chaves compartilhadas no chat e atualizar `.env.local`
-
