@@ -46,7 +46,7 @@ npx.cmd tsx lib/csv-import/importer.ts "dados antigos.csv"
 
 O endpoint `POST /api/sync/run` exige o cabeçalho `x-cron-secret`. Use `?backfill=true` apenas para recarregar todo o período permitido pela regra acima.
 
-## Estado atual — 23/06/2026
+## Estado atual — 24/06/2026
 
 Concluído:
 
@@ -59,6 +59,9 @@ Concluído:
 - [x] Dashboard, transações, filtros e fila de revisão respondendo com HTTP 200
 - [x] TypeScript, ESLint e build de produção sem erros
 - [x] Projeto publicado na Vercel com preset Next.js e variáveis configuradas
+- [x] Nova fundação visual responsiva aplicada à visão geral, transações e revisão
+- [x] Navegação lateral no desktop e navegação inferior no mobile
+- [x] Identidade "Nexo Financeiro", cards de métricas e tabela de transações redesenhados
 
 Pendente:
 
