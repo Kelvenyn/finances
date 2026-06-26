@@ -1,38 +1,85 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useMemo, useState, type ReactNode } from "react";
 import { signOutAction } from "@/app/actions";
+import { AppearanceProvider, useAppearance } from "@/components/layout/appearance-provider";
+import { NavIcon, type NavIconName } from "@/components/layout/nav-icons";
+import { ProfileSwitcher } from "@/components/layout/profile-switcher";
 
-const navigation = [
-  { href: "/", label: "Inicio", icon: "home" },
-  { href: "/personal", label: "Pessoal", icon: "wallet" },
-  { href: "/business", label: "Empresa", icon: "briefcase" },
-  { href: "/transactions", label: "Movimentacoes", icon: "list" },
-  { href: "/review", label: "Revisao", icon: "check" },
-  { href: "/settings", label: "Ajustes", icon: "settings" },
-] as const;
+const navigation: Array<{ href: string; label: string; icon: NavIconName }> = [
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/lancamentos", label: "Lancamentos", icon: "transactions" },
+  { href: "/faturas", label: "Faturas", icon: "cards" },
+  { href: "/configuracoes", label: "Configuracoes", icon: "settings" },
+];
 
-export function AppShell({ children, userEmail }: { children: ReactNode; userEmail: string }) {
+export function AppShell({
+  children,
+  userEmail,
+}: {
+  children: ReactNode;
+  userEmail: string;
+}) {
+  return (
+    <AppearanceProvider>
+      <PremiumShell userEmail={userEmail}>{children}</PremiumShell>
+    </AppearanceProvider>
+  );
+}
+
+function PremiumShell({
+  children,
+  userEmail,
+}: {
+  children: ReactNode;
+  userEmail: string;
+}) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { preferences } = useAppearance();
+  const [manualCollapsed, setManualCollapsed] = useState(false);
+
+  const profileQuery = searchParams.get("profile") ?? preferences.defaultProfile;
+  const shellClassName = useMemo(() => {
+    const classes = ["premium-app-shell"];
+    if (manualCollapsed || preferences.sidebar === "collapsed") {
+      classes.push("sidebar-collapsed");
+    }
+    if (preferences.sidebar === "expanded") {
+      classes.push("sidebar-expanded");
+    }
+    return classes.join(" ");
+  }, [manualCollapsed, preferences.sidebar]);
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <Link href="/" className="brand-lockup">
-          <span className="brand-mark">F</span>
-          <span>
-            <strong>Finance Core</strong>
-            <small>Kelvenyn</small>
-          </span>
-        </Link>
+    <div className={shellClassName}>
+      <aside className="premium-sidebar">
+        <div className="sidebar-brand-row">
+          <Link href={`/dashboard?profile=${profileQuery}`} className="premium-brand">
+            <span className="brand-mark">F</span>
+            <span className="brand-copy">
+              <strong>Finance Core</strong>
+              <small>Kelvenyn</small>
+            </span>
+          </Link>
+          <button
+            type="button"
+            className="icon-button sidebar-toggle"
+            onClick={() => setManualCollapsed((current) => !current)}
+            aria-label="Abrir ou fechar menu lateral"
+          >
+            <NavIcon name="chevron" />
+          </button>
+        </div>
 
-        <nav className="side-nav" aria-label="Navegacao principal">
+        <nav className="premium-nav" aria-label="Navegacao principal">
           {navigation.map((item) => {
-            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const href = `${item.href}?profile=${profileQuery}`;
             return (
-              <Link key={item.href} href={item.href} className={active ? "active" : ""}>
+              <Link key={item.href} href={href} className={active ? "active" : ""}>
                 <NavIcon name={item.icon} />
                 <span>{item.label}</span>
               </Link>
@@ -40,33 +87,42 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
           })}
         </nav>
 
-        <form action={signOutAction} className="sidebar-footer">
-          <span>{userEmail}</span>
-          <button type="submit">Sair</button>
+        <form action={signOutAction} className="premium-signout">
+          <span className="user-pill">{userEmail}</span>
+          <button type="submit">
+            <NavIcon name="logout" />
+            <span>Sair</span>
+          </button>
         </form>
       </aside>
 
-      <div className="workspace">
-        <header className="topbar">
-          <div>
-            <strong>Finance Core v1</strong>
-            <span>Caixa pratico, separado por perfil</span>
+      <div className="premium-workspace">
+        <header className="premium-topbar">
+          <div className="topbar-title">
+            <span className="eyebrow">Finance Core</span>
+            <strong>Painel financeiro</strong>
           </div>
-          <Link href="/settings" className="topbar-link">
-            Integracoes
-          </Link>
+          <ProfileSwitcher />
         </header>
-        <main className="content-shell">{children}</main>
+
+        <main className="premium-content">{children}</main>
+
+        <nav className="mobile-tabbar" aria-label="Navegacao principal mobile">
+          {navigation.map((item) => {
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <Link
+                key={item.href}
+                href={`${item.href}?profile=${profileQuery}`}
+                className={active ? "active" : ""}
+              >
+                <NavIcon name={item.icon} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );
-}
-
-function NavIcon({ name }: { name: (typeof navigation)[number]["icon"] }) {
-  if (name === "home") return <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5V20H5v-8.5Z" /></svg>;
-  if (name === "wallet") return <svg viewBox="0 0 24 24"><path d="M4 7h15v12H4z" /><path d="M16 12h4v4h-4z" /></svg>;
-  if (name === "briefcase") return <svg viewBox="0 0 24 24"><path d="M4 8h16v11H4z" /><path d="M9 8V5h6v3" /></svg>;
-  if (name === "list") return <svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></svg>;
-  if (name === "check") return <svg viewBox="0 0 24 24"><path d="m5 13 4 4L19 7" /></svg>;
-  return <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /><path d="M4 12h2m12 0h2M12 4v2m0 12v2" /></svg>;
 }

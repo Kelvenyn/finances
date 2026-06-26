@@ -1,13 +1,7 @@
-import { PersonalDashboard } from "@/components/finance/personal-dashboard";
-import { parsePersonalDashboardPeriod } from "@/lib/data/personal-dashboard";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function PersonalPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | undefined>>;
-}) {
-  const params = await searchParams;
-  return <PersonalDashboard period={parsePersonalDashboardPeriod(params.period)} />;
+export default function PersonalPage() {
+  redirect("/dashboard?profile=personal");
 }

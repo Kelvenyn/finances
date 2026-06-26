@@ -40,7 +40,7 @@ export async function ProfileDashboard({ profile }: { profile: ProfileType }) {
               <span className="eyebrow">Recentes</span>
               <h2>Movimentacoes do mes</h2>
             </div>
-            <Link href={`/transactions?profile=${profile}`} className="text-link">
+            <Link href={`/lancamentos?profile=${profile}`} className="text-link">
               Ver todas
             </Link>
           </div>

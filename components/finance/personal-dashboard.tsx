@@ -58,7 +58,7 @@ export async function PersonalDashboard({ period }: { period: PersonalDashboardP
             {periodOptions.map((option) => (
               <Link
                 key={option.value}
-                href={`/personal?period=${option.value}`}
+                href={`/dashboard?profile=personal&period=${option.value}`}
                 className={option.value === period ? "active" : ""}
               >
                 {option.label}
@@ -76,7 +76,7 @@ export async function PersonalDashboard({ period }: { period: PersonalDashboardP
               <span className="eyebrow">Recentes</span>
               <h2>Ultimos lancamentos pessoais</h2>
             </div>
-            <Link href="/transactions?profile=personal" className="text-link">
+            <Link href="/lancamentos?profile=personal" className="text-link">
               Ver todas
             </Link>
           </div>
@@ -93,7 +93,7 @@ export async function PersonalDashboard({ period }: { period: PersonalDashboardP
           <div className="review-summary">
             <strong>{data.reviewCount}</strong>
             <p>{data.reviewCount === 1 ? "lancamento pessoal precisa" : "lancamentos pessoais precisam"} de categoria.</p>
-            <Link href="/review" className="text-link">
+            <Link href="/lancamentos?profile=personal&status=review" className="text-link">
               Revisar agora
             </Link>
           </div>

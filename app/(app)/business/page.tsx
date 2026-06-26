@@ -1,7 +1,7 @@
-import { ProfileDashboard } from "@/components/finance/profile-dashboard";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default function BusinessPage() {
-  return <ProfileDashboard profile="business" />;
+  redirect("/dashboard?profile=business");
 }
