@@ -1,21 +1,12 @@
-# CODEX.md — Continuação
+# CODEX.md
 
-Leia `AGENTS.md`; ele contém o estado real e as decisões atuais.
+Leia `AGENTS.md` primeiro. Ele é a fonte curta de continuidade para Codex, Claude Code e outros agentes.
 
-Não rode novamente a migration nem importe o CSV sem necessidade. Ambos os processos são idempotentes, mas já foram concluídos.
+Documentos principais:
 
-Próxima etapa recomendada:
+- `docs/product/vision.md`
+- `docs/product/finance-core-v1.md`
+- `docs/product/roadmap.md`
+- `docs/product/decisions.md`
 
-1. Implementar autenticação Supabase para proteger todas as páginas.
-2. Implementar edição de categorias em `/review`.
-3. Publicar na Vercel, cadastrar as variáveis de `.env.local` no ambiente e configurar o cron de sincronização.
-4. Rotacionar as chaves que foram compartilhadas em conversa e substituir somente em `.env.local` e na Vercel.
-
-Validação registrada em 23/06/2026:
-
-- `npm.cmd run typecheck`: passou
-- `npm.cmd run lint`: passou
-- `npm.cmd run build`: passou
-- `/`, `/transactions`, `/review`: HTTP 200
-- Supabase: 8.153 transações consolidadas
-
+Antes de implementar algo novo, confirme se pertence ao Finance Core v1 ou se deve ir para o roadmap.

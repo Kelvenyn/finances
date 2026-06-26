@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
-import { AppShell } from "@/components/layout/app-shell";
 import "./globals.css";
 
-export const metadata: Metadata = { title: "Nexo Financeiro", description: "Suas finanças pessoais e empresariais em um só lugar" };
+export const metadata: Metadata = {
+  title: "Finance Core",
+  description: "Financas pessoais e empresariais em um lugar centralizado.",
+};
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="pt-BR"><body><AppShell>{children}</AppShell></body></html>;
+  return (
+    <html lang="pt-BR">
+      <body>{children}</body>
+    </html>
+  );
 }
-

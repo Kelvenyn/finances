@@ -1,11 +1,9 @@
-node_modules/
-.next/
-.env*
-!.env.example
-*.csv
-!.gitkeep
-npm-debug.log*
-dev-server*.log
-*.tsbuildinfo
-
+.env*.local
 .vercel
+.next
+node_modules
+dist
+coverage
+*.log
+*.tsbuildinfo
+dados antigos.csv

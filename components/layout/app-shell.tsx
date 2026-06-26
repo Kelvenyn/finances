@@ -3,45 +3,70 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { signOutAction } from "@/app/actions";
 
 const navigation = [
-  { href: "/", label: "Visão geral", icon: "overview" },
-  { href: "/transactions", label: "Transações", icon: "transactions" },
-  { href: "/review", label: "Revisar", icon: "review" },
+  { href: "/", label: "Inicio", icon: "home" },
+  { href: "/personal", label: "Pessoal", icon: "wallet" },
+  { href: "/business", label: "Empresa", icon: "briefcase" },
+  { href: "/transactions", label: "Movimentacoes", icon: "list" },
+  { href: "/review", label: "Revisao", icon: "check" },
+  { href: "/settings", label: "Ajustes", icon: "settings" },
 ] as const;
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, userEmail }: { children: ReactNode; userEmail: string }) {
   const pathname = usePathname();
-  return <div className="app-shell">
-    <aside className="sidebar">
-      <div className="brand-lockup"><span className="brand-mark">N</span><span><strong>Nexo</strong><small>Financeiro</small></span></div>
-      <nav className="side-nav" aria-label="Navegação principal">
-        <span className="nav-caption">Painel</span>
-        {navigation.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          return <Link key={item.href} href={item.href} className={active ? "active" : ""}><NavIcon name={item.icon} /><span>{item.label}</span>{item.href === "/review" && <span className="nav-dot" />}</Link>;
-        })}
-      </nav>
-      <div className="sidebar-status"><div className="status-heading"><span className="status-dot" /> Dados protegidos</div><p>Sincronização segura via Open Finance.</p></div>
-    </aside>
-    <div className="workspace">
-      <header className="topbar">
-        <div className="mobile-brand"><span className="brand-mark">N</span><strong>Nexo</strong></div>
-        <div className="topbar-context"><span className="live-dot" /> 4 bancos conectados</div>
-        <div className="topbar-actions"><span className="last-sync">Atualizado recentemente</span><button className="icon-button" aria-label="Notificações"><BellIcon /><span className="notification-dot" /></button><div className="avatar" aria-label="Perfil de Kelvenyn">K</div></div>
-      </header>
-      <main className="content-shell">{children}</main>
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <Link href="/" className="brand-lockup">
+          <span className="brand-mark">F</span>
+          <span>
+            <strong>Finance Core</strong>
+            <small>Kelvenyn</small>
+          </span>
+        </Link>
+
+        <nav className="side-nav" aria-label="Navegacao principal">
+          {navigation.map((item) => {
+            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            return (
+              <Link key={item.href} href={item.href} className={active ? "active" : ""}>
+                <NavIcon name={item.icon} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <form action={signOutAction} className="sidebar-footer">
+          <span>{userEmail}</span>
+          <button type="submit">Sair</button>
+        </form>
+      </aside>
+
+      <div className="workspace">
+        <header className="topbar">
+          <div>
+            <strong>Finance Core v1</strong>
+            <span>Caixa pratico, separado por perfil</span>
+          </div>
+          <Link href="/settings" className="topbar-link">
+            Integracoes
+          </Link>
+        </header>
+        <main className="content-shell">{children}</main>
+      </div>
     </div>
-    <nav className="mobile-nav" aria-label="Navegação mobile">
-      {navigation.map((item) => { const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href); return <Link key={item.href} href={item.href} className={active ? "active" : ""}><NavIcon name={item.icon} /><span>{item.label}</span></Link>; })}
-    </nav>
-  </div>;
+  );
 }
 
-function NavIcon({ name }: { name: "overview" | "transactions" | "review" }) {
-  if (name === "transactions") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" /></svg>;
-  if (name === "review") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l2 2 4-4M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" /></svg>;
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9zm0 7h6v-4H4v4zm10 0h6v-9h-6v9zm0-16v4h6V4h-6z" /></svg>;
+function NavIcon({ name }: { name: (typeof navigation)[number]["icon"] }) {
+  if (name === "home") return <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5V20H5v-8.5Z" /></svg>;
+  if (name === "wallet") return <svg viewBox="0 0 24 24"><path d="M4 7h15v12H4z" /><path d="M16 12h4v4h-4z" /></svg>;
+  if (name === "briefcase") return <svg viewBox="0 0 24 24"><path d="M4 8h16v11H4z" /><path d="M9 8V5h6v3" /></svg>;
+  if (name === "list") return <svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></svg>;
+  if (name === "check") return <svg viewBox="0 0 24 24"><path d="m5 13 4 4L19 7" /></svg>;
+  return <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /><path d="M4 12h2m12 0h2M12 4v2m0 12v2" /></svg>;
 }
-
-function BellIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 00-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>; }

@@ -1,81 +1,147 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { BancoTransaction, listTransactions } from "./client";
+import type { FlowType, ProfileType } from "@/lib/types";
+import { fetchBancoAccounts, fetchBancoTransactions, type BancoAccount, type BancoTransaction } from "./client";
 
-const ACCOUNTS = [
-  { id: "7d967ed0-9a1b-41e9-946f-b480a701b700", bank: "99pay", profile: "personal" },
-  { id: "cb419926-a08d-4a7b-8e74-44553f4ae4a8", bank: "nubank", profile: "personal" },
-  { id: "0fc9466f-e839-4527-8be2-025dd5427899", bank: "nubank", profile: "personal" },
-  { id: "d64add96-77cc-4ec1-ade2-81aa3a15203b", bank: "infinitepay", profile: "business" },
-  { id: "49d570b1-8176-4583-8fb2-76a5faf5bc45", bank: "itau", profile: "personal" },
-  { id: "0c0f58b0-b470-44bd-bc29-e2ead894c4d9", bank: "itau", profile: "personal" },
-] as const;
-
-// O CSV é a fonte oficial do histórico pessoal até 17/05/2026.
-const PERSONAL_BANK_START = "2026-05-18";
-
-function txDate(tx: BancoTransaction) {
-  return String(tx.date ?? tx.transactionDate ?? new Date().toISOString()).slice(0, 10);
+function accountExternalId(account: BancoAccount) {
+  const id = account.account_id ?? account.id;
+  if (!id) throw new Error("Conta Banco MCP sem identificador.");
+  return String(id);
 }
 
-function txDescription(tx: BancoTransaction) {
-  return String(tx.description ?? tx.merchant?.name ?? "Transação bancária").trim();
+function accountProfile(externalId: string): ProfileType {
+  const businessIds = new Set((process.env.BANCO_MCP_BUSINESS_ACCOUNT_IDS ?? "").split(",").map((item) => item.trim()).filter(Boolean));
+  return businessIds.has(externalId) ? "business" : "personal";
 }
 
-function txFlow(tx: BancoTransaction, amount: number) {
-  const signal = `${tx.type ?? ""} ${tx.direction ?? ""}`.toLowerCase();
-  if (/debit|expense|saida|despesa/.test(signal)) return "despesa";
-  if (/credit|income|entrada|receita/.test(signal)) return "receita";
-  return amount < 0 ? "despesa" : "receita";
+function accountType(account: BancoAccount) {
+  const value = String(account.type ?? "").toLowerCase();
+  if (value.includes("credit")) return "credit";
+  if (value.includes("wallet")) return "wallet";
+  if (value.includes("bank") || value.includes("checking")) return "bank";
+  return "other";
+}
+
+function parseAmount(value: unknown) {
+  const amount = Number(String(value ?? "0").replace(",", "."));
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function transactionDate(transaction: BancoTransaction) {
+  return String(transaction.date ?? transaction.transactionDate ?? new Date().toISOString()).slice(0, 10);
+}
+
+function transactionDescription(transaction: BancoTransaction) {
+  return String(transaction.description ?? transaction.merchant?.name ?? "Movimentacao bancaria").trim();
+}
+
+function transactionFlow(transaction: BancoTransaction, signedAmount: number): FlowType {
+  const signal = `${transaction.type ?? ""} ${transaction.direction ?? ""}`.toLowerCase();
+  if (/debit|expense|saida|despesa|outflow/.test(signal)) return "expense";
+  if (/credit|income|entrada|receita|inflow/.test(signal)) return "income";
+  return signedAmount < 0 ? "expense" : "income";
 }
 
 export async function syncBancoMcp(backfill = false) {
   const supabase = createAdminClient();
+  const startedAt = new Date().toISOString();
   const today = new Date().toISOString().slice(0, 10);
-  const fallbackFrom = backfill ? "2022-01-01" : new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
-  const summary: Array<{ bank: string; account_id: string; fetched: number; error?: string }> = [];
+  const from = backfill ? "2022-01-01" : new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
 
-  for (const account of ACCOUNTS) {
-    try {
-      const from = backfill && account.profile === "personal" ? PERSONAL_BANK_START : fallbackFrom;
+  const syncRun = await supabase
+    .from("sync_runs")
+    .insert({ source: "banco_mcp", status: "running", started_at: startedAt })
+    .select("id")
+    .single();
+
+  if (syncRun.error) throw syncRun.error;
+
+  let totalAccounts = 0;
+  let totalTransactions = 0;
+
+  try {
+    const accountsPayload = await fetchBancoAccounts();
+    const accounts = accountsPayload.results ?? accountsPayload.accounts ?? [];
+    totalAccounts = accounts.length;
+
+    for (const account of accounts) {
+      const externalId = accountExternalId(account);
+      const profile = accountProfile(externalId);
+      const institution = String(account.bank ?? account.institution ?? "Banco MCP");
+      const name = String(account.name ?? institution);
+
+      const accountUpsert = await supabase
+        .from("accounts")
+        .upsert(
+          {
+            profile,
+            name,
+            institution,
+            type: accountType(account),
+            external_id: externalId,
+            current_balance: parseAmount(account.balance ?? account.currentBalance),
+            status: String(account.status ?? "connected").toLowerCase(),
+            raw_data: account,
+          },
+          { onConflict: "external_id" },
+        )
+        .select("id")
+        .single();
+
+      if (accountUpsert.error) throw accountUpsert.error;
+
       let page = 1;
-      let fetched = 0;
       while (true) {
-        const payload = await listTransactions(account.id, from, today, page);
+        const payload = await fetchBancoTransactions(externalId, from, today, page);
         const transactions = payload.results ?? payload.transactions ?? [];
         if (!transactions.length) break;
-        const rows = transactions.map((tx) => {
-          const signedAmount = Number(tx.amount ?? 0);
-          const description = txDescription(tx);
+
+        const rows = transactions.map((transaction) => {
+          const signedAmount = parseAmount(transaction.amount);
+          const description = transactionDescription(transaction);
+          const date = transactionDate(transaction);
+          const fallbackId = `${externalId}:${date}:${signedAmount}:${description}`;
+
           return {
-            external_id: String(tx.id ?? tx.transactionId ?? `${account.id}-${txDate(tx)}-${signedAmount}-${description}`),
+            profile,
+            account_id: accountUpsert.data.id,
+            external_id: String(transaction.id ?? transaction.transactionId ?? fallbackId),
             source: "banco_mcp",
-            profile: account.profile,
-            bank: account.bank,
-            bank_account_id: account.id,
-            date: txDate(tx),
+            date,
             description,
             amount: Math.abs(signedAmount),
-            flow: txFlow(tx, signedAmount),
-            payment_method: String(tx.paymentMethod ?? tx.operationType ?? "outros").toLowerCase(),
-            status: String(tx.status ?? "posted").toLowerCase(),
-            category: tx.category ? String(tx.category) : null,
-            needs_review: !tx.category,
-            raw_data: tx,
+            flow: transactionFlow(transaction, signedAmount),
+            status: String(transaction.status ?? "posted").toLowerCase(),
+            needs_review: true,
+            raw_data: transaction,
           };
         });
-        const { error } = await supabase.from("transactions").upsert(rows, { onConflict: "external_id" });
-        if (error) throw error;
-        fetched += rows.length;
+
+        const result = await supabase.from("transactions").upsert(rows, { onConflict: "source,external_id" });
+        if (result.error) throw result.error;
+
+        totalTransactions += rows.length;
         if (transactions.length < 500) break;
         page += 1;
       }
-      await supabase.from("sync_log").insert({ bank: account.bank, account_id: account.id, last_tx_date: today, new_count: fetched, status: "ok" });
-      summary.push({ bank: account.bank, account_id: account.id, fetched });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await supabase.from("sync_log").insert({ bank: account.bank, account_id: account.id, status: "error", error_msg: message });
-      summary.push({ bank: account.bank, account_id: account.id, fetched: 0, error: message });
     }
+
+    await supabase
+      .from("sync_runs")
+      .update({
+        status: "success",
+        finished_at: new Date().toISOString(),
+        accounts_count: totalAccounts,
+        transactions_count: totalTransactions,
+      })
+      .eq("id", syncRun.data.id);
+
+    return { ok: true, accounts: totalAccounts, transactions: totalTransactions };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await supabase
+      .from("sync_runs")
+      .update({ status: "error", finished_at: new Date().toISOString(), error_message: message })
+      .eq("id", syncRun.data.id);
+    throw error;
   }
-  return { ok: summary.every((item) => !item.error), total_fetched: summary.reduce((sum, item) => sum + item.fetched, 0), accounts: summary };
 }
