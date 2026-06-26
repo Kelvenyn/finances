@@ -590,6 +590,16 @@ td small {
   gap: 12px;
 }
 
+.review-group {
+  display: grid;
+  gap: 12px;
+}
+
+.review-group > h2 {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+
 .review-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, auto);

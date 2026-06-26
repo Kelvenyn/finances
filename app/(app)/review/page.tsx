@@ -9,6 +9,10 @@ export default async function ReviewPage() {
     listTransactions({ needsReview: true }),
     listCategories(),
   ]);
+  const groups = [
+    { profile: "personal" as const, title: "Pessoal", items: transactions.filter((transaction) => transaction.profile === "personal") },
+    { profile: "business" as const, title: "Empresarial", items: transactions.filter((transaction) => transaction.profile === "business") },
+  ];
 
   return (
     <>
@@ -20,34 +24,41 @@ export default async function ReviewPage() {
 
       <section className="review-list">
         {transactions.length ? (
-          transactions.map((transaction) => {
-            const options = categories.filter((category) => category.profile === transaction.profile && category.flow === transaction.flow);
-            return (
-              <article className="review-card" key={transaction.id}>
-                <div>
-                  <span className="eyebrow">{profileLabel(transaction.profile)}</span>
-                  <h2>{transaction.description}</h2>
-                  <p>
-                    {formatDate(transaction.date)} · {transaction.accounts?.name ?? "Sem conta"} · {brl.format(Number(transaction.amount))}
-                  </p>
-                </div>
-                <form action={updateTransactionCategory}>
-                  <input type="hidden" name="transactionId" value={transaction.id} />
-                  <select name="categoryId" required defaultValue="">
-                    <option value="" disabled>
-                      Escolha a categoria
-                    </option>
-                    {options.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button type="submit">Salvar</button>
-                </form>
-              </article>
-            );
-          })
+          groups.map((group) =>
+            group.items.length ? (
+              <div className="review-group" key={group.profile}>
+                <h2>{group.title}</h2>
+                {group.items.map((transaction) => {
+                  const options = categories.filter((category) => category.profile === transaction.profile && category.flow === transaction.flow);
+                  return (
+                    <article className="review-card" key={transaction.id}>
+                      <div>
+                        <span className="eyebrow">{profileLabel(transaction.profile)}</span>
+                        <h2>{transaction.description}</h2>
+                        <p>
+                          {formatDate(transaction.date)} - {transaction.accounts?.name ?? "Sem conta"} - {brl.format(Number(transaction.amount))}
+                        </p>
+                      </div>
+                      <form action={updateTransactionCategory}>
+                        <input type="hidden" name="transactionId" value={transaction.id} />
+                        <select name="categoryId" required defaultValue="">
+                          <option value="" disabled>
+                            Escolha a categoria
+                          </option>
+                          {options.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button type="submit">Salvar</button>
+                      </form>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : null,
+          )
         ) : (
           <div className="panel empty-state">
             <strong>Nada para revisar.</strong>

@@ -28,7 +28,7 @@ export default async function SettingsPage() {
                 <div key={account.id}>
                   <strong>{account.name}</strong>
                   <span>
-                    {profileLabel(account.profile)} · {account.institution} · {account.status}
+                    {profileLabel(account.profile)} - {account.institution} - {account.status}
                   </span>
                   <small>{account.current_balance === null ? "Saldo nao informado" : brl.format(Number(account.current_balance))}</small>
                 </div>
@@ -49,7 +49,7 @@ export default async function SettingsPage() {
           <div className="category-cloud">
             {categories.map((category) => (
               <span key={category.id} style={{ borderColor: category.color }}>
-                {profileLabel(category.profile)} · {flowLabel(category.flow)} · {category.name}
+                {profileLabel(category.profile)} - {flowLabel(category.flow)} - {category.name}
               </span>
             ))}
           </div>

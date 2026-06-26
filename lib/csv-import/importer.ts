@@ -5,6 +5,30 @@ import { createClient } from "@supabase/supabase-js";
 import { parse } from "csv-parse/sync";
 import type { FlowType, ProfileType } from "@/lib/types";
 
+type ExistingReviewState = {
+  external_id: string | null;
+  category_id: string | null;
+  needs_review: boolean;
+  reviewed_at: string | null;
+};
+
+type TransactionRow = {
+  profile: ProfileType;
+  account_id: string;
+  external_id: string;
+  source: "csv";
+  date: string;
+  description: string;
+  amount: number;
+  flow: FlowType;
+  category_id: string | null;
+  status: "posted";
+  needs_review: boolean;
+  reviewed_at?: string | null;
+  import_batch_id: string;
+  raw_data: Record<string, string>;
+};
+
 function loadLocalEnv() {
   const path = resolve(process.cwd(), ".env.local");
   if (!existsSync(path)) return;
@@ -75,10 +99,61 @@ async function main() {
   if (!existsSync(path)) throw new Error(`CSV nao encontrado: ${path}`);
 
   const content = readFileSync(path, "utf8").replace(/^\uFEFF/, "");
+  const fileFingerprint = createHash("sha256").update(content).digest("hex").slice(0, 16);
   const firstLine = content.split(/\r?\n/, 1)[0];
   const delimiter = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ";" : ",";
   const records = parse(content, { columns: true, delimiter, skip_empty_lines: true, relax_column_count: true, trim: true }) as Record<string, string>[];
   const supabase = createClient(url, key, { auth: { persistSession: false } });
+  const accountIds = new Map<ProfileType, string>();
+  const categoryIds = new Map<string, string>();
+
+  async function accountIdFor(profile: ProfileType) {
+    const cached = accountIds.get(profile);
+    if (cached) return cached;
+
+    const account = await supabase
+      .from("accounts")
+      .upsert(
+        {
+          profile,
+          name: profile === "business" ? "Historico CSV empresarial" : "Historico CSV pessoal",
+          institution: "Planilha",
+          type: "other",
+          external_id: `csv-history-${profile}`,
+          status: "connected",
+        },
+        { onConflict: "external_id" },
+      )
+      .select("id")
+      .single();
+    if (account.error) throw account.error;
+
+    accountIds.set(profile, account.data.id);
+    return account.data.id as string;
+  }
+
+  async function categoryIdFor(profile: ProfileType, flow: FlowType, categoryName: string) {
+    const slug = `${profile}-${flow}-${slugify(categoryName)}`;
+    const cached = categoryIds.get(slug);
+    if (cached) return cached;
+
+    const existing = await supabase.from("categories").select("id").eq("slug", slug).maybeSingle();
+    if (existing.error) throw existing.error;
+    if (existing.data?.id) {
+      categoryIds.set(slug, existing.data.id);
+      return existing.data.id as string;
+    }
+
+    const category = await supabase
+      .from("categories")
+      .insert({ profile, name: categoryName, slug, flow, color: "#64748b" })
+      .select("id")
+      .single();
+    if (category.error) throw category.error;
+
+    categoryIds.set(slug, category.data.id);
+    return category.data.id as string;
+  }
 
   const batch = await supabase
     .from("import_batches")
@@ -87,56 +162,27 @@ async function main() {
     .single();
   if (batch.error) throw batch.error;
 
-  const account = await supabase
-    .from("accounts")
-    .upsert(
-      {
-        profile: process.env.CSV_DEFAULT_PROFILE === "business" ? "business" : "personal",
-        name: "Historico CSV",
-        institution: "Planilha",
-        type: "other",
-        external_id: "csv-history",
-        status: "connected",
-      },
-      { onConflict: "external_id" },
-    )
-    .select("id")
-    .single();
-  if (account.error) throw account.error;
-
   try {
     let imported = 0;
 
-    for (let offset = 0; offset < records.length; offset += 250) {
-      const slice = records.slice(offset, offset + 250);
-      const rows = [];
+    for (let offset = 0; offset < records.length; offset += 50) {
+      const slice = records.slice(offset, offset + 50);
+      const rows: TransactionRow[] = [];
 
       for (const row of slice) {
         const rawAmount = parseMoney(get(row, ["valor", "total", "total r$", "amount"]) || "0");
         const profile = parseProfile(row);
         const flow = parseFlow(row, rawAmount);
         const date = parseDate(get(row, ["data", "date"]));
-        const description = get(row, ["descricao", "descrição", "description", "lancamento", "lançamento"]) || "Sem descricao";
+        const description = get(row, ["descricao", "descricao", "description", "lancamento", "lancamento"]) || "Sem descricao";
         const categoryName = get(row, ["categoria", "categorias", "category"]);
-        let categoryId = null;
+        const categoryId = categoryName ? await categoryIdFor(profile, flow, categoryName) : null;
+        const sourceLine = offset + rows.length + 2;
+        const identity = JSON.stringify(["csv-v2", fileFingerprint, sourceLine, profile, date, description, rawAmount, flow]);
 
-        if (categoryName) {
-          const category = await supabase
-            .from("categories")
-            .upsert(
-              { profile, name: categoryName, slug: `${profile}-${slugify(categoryName)}`, flow, color: "#64748b" },
-              { onConflict: "slug" },
-            )
-            .select("id")
-            .single();
-          if (category.error) throw category.error;
-          categoryId = category.data.id;
-        }
-
-        const identity = JSON.stringify([profile, date, description, rawAmount, categoryName, flow]);
         rows.push({
           profile,
-          account_id: account.data.id,
+          account_id: await accountIdFor(profile),
           external_id: createHash("sha256").update(identity).digest("hex"),
           source: "csv",
           date,
@@ -151,7 +197,32 @@ async function main() {
         });
       }
 
-      const result = await supabase.from("transactions").upsert(rows, { onConflict: "source,external_id" });
+      const externalIds = rows.map((row) => row.external_id);
+      const existing = await supabase
+        .from("transactions")
+        .select("external_id, category_id, needs_review, reviewed_at")
+        .eq("source", "csv")
+        .in("external_id", externalIds);
+      if (existing.error) throw existing.error;
+
+      const existingByExternalId = new Map(
+        ((existing.data ?? []) as ExistingReviewState[])
+          .filter((row) => row.external_id)
+          .map((row) => [row.external_id as string, row]),
+      );
+      const preservedRows = rows.map((row) => {
+        const previous = existingByExternalId.get(row.external_id);
+        if (!previous?.category_id && !previous?.reviewed_at) return row;
+
+        return {
+          ...row,
+          category_id: previous.category_id ?? row.category_id,
+          needs_review: false,
+          reviewed_at: previous.reviewed_at,
+        };
+      });
+
+      const result = await supabase.from("transactions").upsert(preservedRows, { onConflict: "source,external_id" });
       if (result.error) throw result.error;
       imported += rows.length;
       console.log(`Processadas ${imported} de ${records.length}`);

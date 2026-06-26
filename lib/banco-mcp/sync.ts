@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { FlowType, ProfileType } from "@/lib/types";
 import {
@@ -8,6 +10,29 @@ import {
   type BancoConnection,
   type BancoTransaction,
 } from "./client";
+
+type BancoTransactionRow = {
+  profile: ProfileType;
+  account_id: string;
+  external_id: string;
+  source: "banco_mcp";
+  date: string;
+  description: string;
+  amount: number;
+  flow: FlowType;
+  status: string;
+  needs_review: boolean;
+  category_id?: string | null;
+  reviewed_at?: string | null;
+  raw_data: BancoTransaction;
+};
+
+type ExistingReviewState = {
+  external_id: string | null;
+  category_id: string | null;
+  needs_review: boolean;
+  reviewed_at: string | null;
+};
 
 function accountExternalId(account: BancoAccount) {
   const id = account.account_id ?? account.id;
@@ -133,12 +158,37 @@ export async function syncBancoMcp(backfill = false) {
               amount: Math.abs(signedAmount),
               flow: transactionFlow(transaction, signedAmount),
               status: String(transaction.status ?? "posted").toLowerCase(),
-              needs_review: !transaction.category,
+              needs_review: true,
               raw_data: transaction,
+            };
+          }) satisfies BancoTransactionRow[];
+
+          const externalIds = rows.map((row) => row.external_id);
+          const existing = await supabase
+            .from("transactions")
+            .select("external_id, category_id, needs_review, reviewed_at")
+            .eq("source", "banco_mcp")
+            .in("external_id", externalIds);
+          if (existing.error) throw existing.error;
+
+          const existingByExternalId = new Map(
+            ((existing.data ?? []) as ExistingReviewState[])
+              .filter((row) => row.external_id)
+              .map((row) => [row.external_id as string, row]),
+          );
+          const preservedRows = rows.map((row) => {
+            const previous = existingByExternalId.get(row.external_id);
+            if (!previous?.category_id && !previous?.reviewed_at) return row;
+
+            return {
+              ...row,
+              category_id: previous.category_id,
+              needs_review: false,
+              reviewed_at: previous.reviewed_at,
             };
           });
 
-          const result = await supabase.from("transactions").upsert(rows, { onConflict: "source,external_id" });
+          const result = await supabase.from("transactions").upsert(preservedRows, { onConflict: "source,external_id" });
           if (result.error) throw result.error;
 
           totalTransactions += rows.length;

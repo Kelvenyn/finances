@@ -21,7 +21,7 @@ export async function getDashboardSummary(profile: ProfileType): Promise<Dashboa
   const supabase = await createServerSupabaseClient();
   const from = monthStart();
 
-  const [{ data: transactions }, { count: reviewCount }] = await Promise.all([
+  const [transactionsResult, reviewResult] = await Promise.all([
     supabase
       .from("transactions")
       .select("*, accounts(name,institution,type), categories(name,color)")
@@ -36,7 +36,10 @@ export async function getDashboardSummary(profile: ProfileType): Promise<Dashboa
       .eq("needs_review", true),
   ]);
 
-  const rows = ((transactions ?? []) as unknown[]) as Transaction[];
+  if (transactionsResult.error) throw transactionsResult.error;
+  if (reviewResult.error) throw reviewResult.error;
+
+  const rows = ((transactionsResult.data ?? []) as unknown[]) as Transaction[];
   const income = sumFlow(rows, "income");
   const expense = sumFlow(rows, "expense");
   const investment = sumFlow(rows, "investment");
@@ -56,7 +59,7 @@ export async function getDashboardSummary(profile: ProfileType): Promise<Dashboa
     expense,
     investment,
     net: income - expense - investment,
-    reviewCount: reviewCount ?? 0,
+    reviewCount: reviewResult.count ?? 0,
     transactionCount: rows.length,
     recentTransactions: rows.slice(0, 10),
     byCategory: [...categoryMap.values()].sort((a, b) => b.amount - a.amount).slice(0, 6),
