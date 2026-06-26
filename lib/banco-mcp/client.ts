@@ -15,6 +15,15 @@ export interface BancoAccount {
   [key: string]: unknown;
 }
 
+export interface BancoConnection {
+  connector_id?: string;
+  connector_name?: string;
+  item_id?: string;
+  status?: string;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
 export interface BancoTransaction {
   id?: string;
   transactionId?: string;
@@ -53,8 +62,15 @@ async function bancoMcpPost<T>(path: string, body: unknown = {}) {
   return (payload && typeof payload === "object" && "result" in payload ? payload.result : payload) as T;
 }
 
-export async function fetchBancoAccounts() {
-  return bancoMcpPost<{ results?: BancoAccount[]; accounts?: BancoAccount[] }>("/accounts/list");
+export async function fetchBancoConnections() {
+  return bancoMcpPost<{ connections?: BancoConnection[]; count?: number }>("/connections/list");
+}
+
+export async function fetchBancoAccounts(item?: string) {
+  return bancoMcpPost<{ results?: BancoAccount[]; accounts?: BancoAccount[]; total?: number; bank?: string; item_id?: string }>(
+    "/accounts/list",
+    item ? { item } : {},
+  );
 }
 
 export async function fetchBancoTransactions(accountId: string, from: string, to: string, page = 1) {

@@ -1,6 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { FlowType, ProfileType } from "@/lib/types";
-import { fetchBancoAccounts, fetchBancoTransactions, type BancoAccount, type BancoTransaction } from "./client";
+import {
+  fetchBancoAccounts,
+  fetchBancoConnections,
+  fetchBancoTransactions,
+  type BancoAccount,
+  type BancoConnection,
+  type BancoTransaction,
+} from "./client";
 
 function accountExternalId(account: BancoAccount) {
   const id = account.account_id ?? account.id;
@@ -11,6 +18,14 @@ function accountExternalId(account: BancoAccount) {
 function accountProfile(externalId: string): ProfileType {
   const businessIds = new Set((process.env.BANCO_MCP_BUSINESS_ACCOUNT_IDS ?? "").split(",").map((item) => item.trim()).filter(Boolean));
   return businessIds.has(externalId) ? "business" : "personal";
+}
+
+function connectionName(connection: BancoConnection) {
+  return String(connection.connector_name ?? connection.connector_id ?? "Banco MCP");
+}
+
+function connectionSelector(connection: BancoConnection) {
+  return String(connection.item_id ?? connection.connector_id ?? connection.connector_name ?? "");
 }
 
 function accountType(account: BancoAccount) {
@@ -59,69 +74,77 @@ export async function syncBancoMcp(backfill = false) {
   let totalTransactions = 0;
 
   try {
-    const accountsPayload = await fetchBancoAccounts();
-    const accounts = accountsPayload.results ?? accountsPayload.accounts ?? [];
-    totalAccounts = accounts.length;
+    const connectionsPayload = await fetchBancoConnections();
+    const connections = connectionsPayload.connections ?? [];
 
-    for (const account of accounts) {
-      const externalId = accountExternalId(account);
-      const profile = accountProfile(externalId);
-      const institution = String(account.bank ?? account.institution ?? "Banco MCP");
-      const name = String(account.name ?? institution);
+    for (const connection of connections) {
+      const selector = connectionSelector(connection);
+      if (!selector) continue;
 
-      const accountUpsert = await supabase
-        .from("accounts")
-        .upsert(
-          {
-            profile,
-            name,
-            institution,
-            type: accountType(account),
-            external_id: externalId,
-            current_balance: parseAmount(account.balance ?? account.currentBalance),
-            status: String(account.status ?? "connected").toLowerCase(),
-            raw_data: account,
-          },
-          { onConflict: "external_id" },
-        )
-        .select("id")
-        .single();
+      const accountsPayload = await fetchBancoAccounts(selector);
+      const accounts = accountsPayload.results ?? accountsPayload.accounts ?? [];
+      totalAccounts += accounts.length;
 
-      if (accountUpsert.error) throw accountUpsert.error;
+      for (const account of accounts) {
+        const externalId = accountExternalId(account);
+        const profile = accountProfile(externalId);
+        const institution = String(account.bank ?? account.institution ?? accountsPayload.bank ?? connectionName(connection));
+        const name = String(account.name ?? institution);
 
-      let page = 1;
-      while (true) {
-        const payload = await fetchBancoTransactions(externalId, from, today, page);
-        const transactions = payload.results ?? payload.transactions ?? [];
-        if (!transactions.length) break;
+        const accountUpsert = await supabase
+          .from("accounts")
+          .upsert(
+            {
+              profile,
+              name,
+              institution,
+              type: accountType(account),
+              external_id: externalId,
+              current_balance: parseAmount(account.balance ?? account.currentBalance),
+              status: String(connection.status ?? account.status ?? "connected").toLowerCase(),
+              raw_data: { connection, account },
+            },
+            { onConflict: "external_id" },
+          )
+          .select("id")
+          .single();
 
-        const rows = transactions.map((transaction) => {
-          const signedAmount = parseAmount(transaction.amount);
-          const description = transactionDescription(transaction);
-          const date = transactionDate(transaction);
-          const fallbackId = `${externalId}:${date}:${signedAmount}:${description}`;
+        if (accountUpsert.error) throw accountUpsert.error;
 
-          return {
-            profile,
-            account_id: accountUpsert.data.id,
-            external_id: String(transaction.id ?? transaction.transactionId ?? fallbackId),
-            source: "banco_mcp",
-            date,
-            description,
-            amount: Math.abs(signedAmount),
-            flow: transactionFlow(transaction, signedAmount),
-            status: String(transaction.status ?? "posted").toLowerCase(),
-            needs_review: true,
-            raw_data: transaction,
-          };
-        });
+        let page = 1;
+        while (true) {
+          const payload = await fetchBancoTransactions(externalId, from, today, page);
+          const transactions = payload.results ?? payload.transactions ?? [];
+          if (!transactions.length) break;
 
-        const result = await supabase.from("transactions").upsert(rows, { onConflict: "source,external_id" });
-        if (result.error) throw result.error;
+          const rows = transactions.map((transaction) => {
+            const signedAmount = parseAmount(transaction.amount);
+            const description = transactionDescription(transaction);
+            const date = transactionDate(transaction);
+            const fallbackId = `${externalId}:${date}:${signedAmount}:${description}`;
 
-        totalTransactions += rows.length;
-        if (transactions.length < 500) break;
-        page += 1;
+            return {
+              profile,
+              account_id: accountUpsert.data.id,
+              external_id: String(transaction.id ?? transaction.transactionId ?? fallbackId),
+              source: "banco_mcp",
+              date,
+              description,
+              amount: Math.abs(signedAmount),
+              flow: transactionFlow(transaction, signedAmount),
+              status: String(transaction.status ?? "posted").toLowerCase(),
+              needs_review: !transaction.category,
+              raw_data: transaction,
+            };
+          });
+
+          const result = await supabase.from("transactions").upsert(rows, { onConflict: "source,external_id" });
+          if (result.error) throw result.error;
+
+          totalTransactions += rows.length;
+          if (transactions.length < 500) break;
+          page += 1;
+        }
       }
     }
 
