@@ -30,11 +30,13 @@ Plataforma single-user para Kelvenyn acompanhar finanças pessoais e empresariai
 - Banco MCP validado com credenciais reais e conta InfinitePay classificada como empresarial via `BANCO_MCP_BUSINESS_ACCOUNT_IDS`.
 - CSV pessoal `Finanças - Pessoal - KELVENYN.csv` importado em 26/06/2026: 3.495 lançamentos, todos no perfil pessoal.
 - Validação local em 26/06/2026: `npm run typecheck`, `npm run lint` e `npm run build` passaram.
+- Próxima etapa pessoal/desktop documentada em `docs/superpowers/specs/2026-06-26-personal-dashboard-sync-design.md`.
+- Plano da etapa pessoal/desktop criado em `docs/superpowers/plans/2026-06-26-personal-dashboard-sync.md`.
+- Painel pessoal em implementação: botão `Atualizar agora`, cards pessoais, gráfico de saldo de 90 dias e filtros expandidos de movimentações.
 
 ## Próximos passos
 
 1. Aplicar `supabase/migrations/002_security_and_integrity.sql` no Supabase.
-2. Fazer commit/push das correções de importação, revisão e segurança.
-3. Redeploy na Vercel após o push.
-4. Revisar categorias importadas do CSV e ajustar nomes/agrupamentos.
-5. Adicionar botão operacional de sincronização Banco MCP no app.
+2. Validar visualmente o painel pessoal em desktop.
+3. Revisar categorias importadas do CSV e ajustar nomes/agrupamentos.
+4. Validar o que Banco MCP entrega sobre cartão/faturas antes de implementar a aba de crédito.

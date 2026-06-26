@@ -10,8 +10,19 @@ export const shortDate = new Intl.DateTimeFormat("pt-BR", {
   timeZone: "UTC",
 });
 
+export const shortDateTime = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 export function formatDate(value: string) {
   return shortDate.format(new Date(`${value}T00:00:00.000Z`));
+}
+
+export function formatDateTime(value: string) {
+  return shortDateTime.format(new Date(value));
 }
 
 export function profileLabel(profile: "personal" | "business") {

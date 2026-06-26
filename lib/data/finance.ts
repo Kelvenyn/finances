@@ -5,6 +5,8 @@ export interface TransactionFilters {
   profile?: ProfileType;
   flow?: FlowType;
   source?: SourceType;
+  accountId?: string;
+  categoryId?: string;
   query?: string;
   from?: string;
   to?: string;
@@ -77,6 +79,8 @@ export async function listTransactions(filters: TransactionFilters = {}) {
   if (filters.profile) query = query.eq("profile", filters.profile);
   if (filters.flow) query = query.eq("flow", filters.flow);
   if (filters.source) query = query.eq("source", filters.source);
+  if (filters.accountId) query = query.eq("account_id", filters.accountId);
+  if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
   if (filters.from) query = query.gte("date", filters.from);
   if (filters.to) query = query.lte("date", filters.to);
   if (filters.needsReview) query = query.eq("needs_review", true);

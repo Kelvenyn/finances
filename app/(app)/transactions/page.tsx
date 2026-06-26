@@ -1,5 +1,5 @@
 import { TransactionsTable } from "@/components/finance/transactions-table";
-import { listTransactions } from "@/lib/data/finance";
+import { listAccounts, listCategories, listTransactions } from "@/lib/data/finance";
 import type { FlowType, ProfileType, SourceType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -10,14 +10,22 @@ export default async function TransactionsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const transactions = await listTransactions({
-    profile: parseProfile(params.profile),
-    flow: parseFlow(params.flow),
-    source: parseSource(params.source),
-    query: params.q,
-    from: params.from,
-    to: params.to,
-  });
+  const profile = parseProfile(params.profile);
+  const [transactions, accounts, categories] = await Promise.all([
+    listTransactions({
+      profile,
+      flow: parseFlow(params.flow),
+      source: parseSource(params.source),
+      accountId: params.accountId,
+      categoryId: params.categoryId,
+      query: params.q,
+      from: params.from,
+      to: params.to,
+    }),
+    listAccounts(),
+    listCategories(profile),
+  ]);
+  const filteredAccounts = profile ? accounts.filter((account) => account.profile === profile) : accounts;
 
   return (
     <>
@@ -45,6 +53,22 @@ export default async function TransactionsPage({
           <option value="banco_mcp">Banco MCP</option>
           <option value="csv">CSV</option>
           <option value="manual">Manual</option>
+        </select>
+        <select name="accountId" defaultValue={params.accountId ?? ""}>
+          <option value="">Todas as contas</option>
+          {filteredAccounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.name}
+            </option>
+          ))}
+        </select>
+        <select name="categoryId" defaultValue={params.categoryId ?? ""}>
+          <option value="">Todas as categorias</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
         </select>
         <input type="date" name="from" defaultValue={params.from ?? ""} />
         <input type="date" name="to" defaultValue={params.to ?? ""} />
